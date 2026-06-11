@@ -1,26 +1,26 @@
-from flask import Flask, jsonify, request, redirect, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 import requests
 from bs4 import BeautifulSoup
 
-app = Flask(__name__, static_folder="public", static_url_path="")
+app = Flask(
+    __name__,
+    static_folder="public",
+    static_url_path=""
+)
+
 CORS(app)
 
 
-
-
-app = Flask(__name__)
-CORS(app)
-
+# =====================================
+# 首頁
+# =====================================
 
 @app.route("/")
 def home():
-    return redirect("/index.html", code=307)
+    return app.send_static_file("index.html")
 
-
-app = Flask(__name__)
-CORS(app)
 
 # =====================================
 # 爬蟲函式
@@ -41,7 +41,7 @@ def scrape_material_prices():
         "rebar": "主力月上海螺紋鋼",
         "lithium": "碳酸鋰(=99.2%出廠價中國)",
         "copper": "銅(現貨)",
-        "gallium": "鎵錠(Gallium ingot)",
+        "gallium": "鎵錠(Gallium ingot)"
     }
 
     results = {}
@@ -106,7 +106,7 @@ def scrape_material_prices():
                 )
 
             except Exception as e:
-                print(f"{target_name}解析失敗: {e}")
+                print(f"{target_name} 解析失敗: {e}")
 
         return results
 
@@ -118,24 +118,7 @@ def scrape_material_prices():
 
 
 # =====================================
-# 儲存 CSV
-# =====================================
-
-
-
-# =====================================
-# 啟動時先抓一次
-# =====================================
-
-cached_prices = scrape_material_prices()
-
-@app.route("/")
-def home():
-    return send_from_directory("public", "index.html")
-
-
-# =====================================
-# API
+# API：取得單一材料價格
 # =====================================
 
 @app.route("/api/price", methods=["GET"])
@@ -146,65 +129,62 @@ def get_price():
         "titanium"
     )
 
-    material_data = cached_prices.get(material)
+    prices = scrape_material_prices()
+
+    material_data = prices.get(material)
 
     if not material_data:
 
         return jsonify({
             "status": "error",
-            "message": "查無資料"
+            "message": "查無資料",
+            "material_requested": material
         }), 404
 
     return jsonify({
-
         "status": "success",
-
         "material_requested": material,
-
-        "base_price":
-        material_data["close"],
-
-        "open":
-        material_data["open"],
-
-        "close":
-        material_data["close"],
-
-        "date":
-        material_data["date"]
-
+        "material_name": material_data["name"],
+        "base_price": material_data["close"],
+        "open": material_data["open"],
+        "close": material_data["close"],
+        "date": material_data["date"]
     })
 
 
 # =====================================
-# 查看全部資料
+# API：查看全部資料
 # =====================================
 
-@app.route("/api/all_prices")
+@app.route("/api/all_prices", methods=["GET"])
 def all_prices():
 
-    return jsonify(cached_prices)
-
-
-# =====================================
-# 手動重新爬取
-# =====================================
-
-@app.route("/api/refresh")
-def refresh():
-
-    global cached_prices
-
-    cached_prices = scrape_material_prices()
+    prices = scrape_material_prices()
 
     return jsonify({
         "status": "success",
-        "message": "資料已更新"
+        "data": prices
     })
 
 
 # =====================================
-# Flask 啟動
+# API：手動重新爬取
+# =====================================
+
+@app.route("/api/refresh", methods=["GET"])
+def refresh():
+
+    prices = scrape_material_prices()
+
+    return jsonify({
+        "status": "success",
+        "message": "資料已更新",
+        "data": prices
+    })
+
+
+# =====================================
+# 本機測試用
 # =====================================
 
 if __name__ == "__main__":
