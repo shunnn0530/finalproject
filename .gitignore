@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+strategic_metals_*.csv
+.env
+.venv/
+venv/

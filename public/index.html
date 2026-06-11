@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工程材料價格衝擊模擬器</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-6">
+
+    <div class="bg-white rounded-2xl shadow-xl p-8 max-w-4xl w-full">
+
+        <h1 class="text-3xl font-bold text-slate-800 mb-6 text-center">
+            🚀 工程材料價格衝擊模擬器
+        </h1>
+
+        <div id="apiStatus"
+            class="text-sm text-center text-slate-500 mb-6 bg-slate-50 py-2 rounded">
+            目前使用：Flask API + 鉅亨網即時資料
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    請選擇工程材料：
+                </label>
+
+                <select id="materialSelect"
+                    class="w-full border border-slate-300 rounded-lg p-3">
+
+                    <option value="titanium">航太鈦合金</option>
+                    <option value="silicon">半導體矽晶圓</option>
+                    <option value="rebar">建築鋼筋</option>
+                    <option value="lithium">電池級碳酸鋰</option>
+                    <option value="copper">工業精煉銅</option>
+                    <option value="gallium">高科技鎵</option>
+
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    請選擇全球事件：
+                </label>
+
+                <select id="eventSelect"
+                    class="w-full border border-slate-300 rounded-lg p-3">
+
+                    <option value="blockade">
+                        海運輸封鎖（斷鏈）
+                    </option>
+
+                    <option value="earthquake">
+                        主要產區大地震（減產）
+                    </option>
+
+                    <option value="tariff">
+                        中美貿易新關稅（成本增加）
+                    </option>
+
+                    <option value="panama_drought">
+                        巴拿馬運河極端乾旱（物流延宕）
+                    </option>
+
+                    <option value="solid_state_battery">
+                        固態電池技術重大突破（需求轉移）
+                    </option>
+
+                    <option value="export_ban">
+                        大國實施戰略物資出口禁令（地緣政治）
+                    </option>
+
+                </select>
+            </div>
+
+        </div>
+
+        <button
+            id="runBtn"
+            onclick="runSimulation()"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200 mb-8 shadow-md">
+
+            ▶ 啟動推演
+
+        </button>
+
+        <!-- 今日開收盤 -->
+
+        <div id="realPriceSection"
+            class="hidden border-t border-slate-200 mt-8 pt-8">
+
+            <h2 class="text-xl font-bold text-slate-800 mb-4">
+                📈 今日開盤 / 收盤行情
+            </h2>
+
+            <p id="materialName"
+                class="text-center text-slate-700 font-semibold mb-2">
+            </p>
+
+            <p id="priceDate"
+                class="text-center text-slate-500 mb-4">
+            </p>
+
+            <div class="grid grid-cols-2 gap-6">
+
+                <div
+                    class="bg-indigo-50 p-6 rounded-xl border border-indigo-200 text-center">
+
+                    <p class="text-indigo-600 font-bold">
+                        開盤價
+                    </p>
+
+                    <p id="openPriceVal"
+                        class="text-3xl font-black text-indigo-900 mt-2">
+                        -
+                    </p>
+
+                </div>
+
+                <div
+                    class="bg-emerald-50 p-6 rounded-xl border border-emerald-200 text-center">
+
+                    <p class="text-emerald-600 font-bold">
+                        收盤價
+                    </p>
+
+                    <p id="closePriceVal"
+                        class="text-3xl font-black text-emerald-900 mt-2">
+                        -
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- 模擬結果 -->
+
+        <div id="resultSection"
+            class="hidden border-t border-slate-200 pt-8 mt-8">
+
+            <h2 class="text-xl font-bold text-slate-800 mb-4">
+                📊 模擬推演結果
+            </h2>
+
+            <div class="bg-blue-50 p-4 rounded mb-6">
+
+                <p id="analysisText"
+                    class="text-slate-700 leading-relaxed">
+                </p>
+
+            </div>
+
+            <div class="w-full h-64 relative">
+
+                <canvas id="priceChart"></canvas>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        let currentChart = null;
+
+        function getApiBaseUrl() {
+
+            // 如果你直接用檔案打開 index.html，會自動連本機 Flask
+            if (window.location.protocol === "file:") {
+                return "http://127.0.0.1:5000";
+            }
+
+            // 如果在 Vercel 上，會自動使用同一個網站的 /api
+            return "";
+        }
+
+        async function runSimulation() {
+
+            const material =
+                document.getElementById(
+                    "materialSelect"
+                ).value;
+
+            const event =
+                document.getElementById(
+                    "eventSelect"
+                ).value;
+
+            const runBtn =
+                document.getElementById(
+                    "runBtn"
+                );
+
+            runBtn.innerText = "資料抓取中...";
+            runBtn.disabled = true;
+
+            try {
+
+                const apiBaseUrl = getApiBaseUrl();
+
+                const response =
+                    await fetch(
+                        `${apiBaseUrl}/api/price?material=${encodeURIComponent(material)}`
+                    );
+
+                const data =
+                    await response.json();
+
+                console.log(data);
+
+                if (data.status !== "success") {
+
+                    alert("查無資料，請確認 app.py 是否有這個材料");
+
+                    return;
+                }
+
+                document
+                    .getElementById(
+                        "realPriceSection"
+                    )
+                    .classList
+                    .remove("hidden");
+
+                document
+                    .getElementById(
+                        "resultSection"
+                    )
+                    .classList
+                    .remove("hidden");
+
+                document
+                    .getElementById(
+                        "materialName"
+                    )
+                    .innerText =
+                    `材料名稱：${data.material_name || data.material_requested}`;
+
+                document
+                    .getElementById(
+                        "openPriceVal"
+                    )
+                    .innerText =
+                    Number(data.open).toFixed(2);
+
+                document
+                    .getElementById(
+                        "closePriceVal"
+                    )
+                    .innerText =
+                    Number(data.close).toFixed(2);
+
+                document
+                    .getElementById(
+                        "priceDate"
+                    )
+                    .innerText =
+                    `報價日期：${data.date}`;
+
+                const eventInfo = getEventInfo(event);
+
+                const basePrice =
+                    Number(data.base_price);
+
+                const futurePrice =
+                    basePrice * eventInfo.multiplier;
+
+                document
+                    .getElementById(
+                        "analysisText"
+                    )
+                    .innerText =
+                    `${eventInfo.text}。因此預估價格將由 ${basePrice.toFixed(2)} 變化至 ${futurePrice.toFixed(2)}。`;
+
+                drawChart(
+                    [
+                        basePrice,
+                        futurePrice
+                    ],
+                    "價格預測"
+                );
+
+            }
+
+            catch (error) {
+
+                console.error(error);
+
+                alert(
+                    "無法連接 Flask API\n請確認 app.py 是否正在執行，或 Vercel 是否部署成功"
+                );
+
+            }
+
+            finally {
+
+                runBtn.innerText = "▶ 啟動推演";
+                runBtn.disabled = false;
+
+            }
+
+        }
+
+        function getEventInfo(event) {
+
+            const events = {
+
+                blockade: {
+                    multiplier: 1.18,
+                    text: "海運輸封鎖造成供應鏈中斷，材料價格可能明顯上升"
+                },
+
+                earthquake: {
+                    multiplier: 1.22,
+                    text: "主要產區發生大地震，產能下降，價格可能上漲"
+                },
+
+                tariff: {
+                    multiplier: 1.16,
+                    text: "中美貿易新關稅提高進口成本，材料價格可能增加"
+                },
+
+                panama_drought: {
+                    multiplier: 1.12,
+                    text: "巴拿馬運河極端乾旱造成物流延宕，運輸成本可能上升"
+                },
+
+                solid_state_battery: {
+                    multiplier: 0.88,
+                    text: "固態電池技術重大突破可能讓部分材料需求轉移，價格可能下降"
+                },
+
+                export_ban: {
+                    multiplier: 1.30,
+                    text: "大國實施戰略物資出口禁令，供給受限，價格可能大幅上漲"
+                }
+
+            };
+
+            return events[event] || {
+                multiplier: 1.10,
+                text: "全球事件造成市場不確定性，材料價格可能出現波動"
+            };
+
+        }
+
+        function drawChart(
+            data,
+            labelName
+        ) {
+
+            const ctx =
+                document
+                    .getElementById(
+                        "priceChart"
+                    )
+                    .getContext("2d");
+
+            if (currentChart) {
+
+                currentChart.destroy();
+
+            }
+
+            currentChart =
+                new Chart(ctx, {
+
+                    type: "line",
+
+                    data: {
+
+                        labels: [
+                            "目前價格",
+                            "事件後價格"
+                        ],
+
+                        datasets: [
+
+                            {
+                                label: labelName,
+                                data: data,
+                                borderWidth: 3,
+                                tension: 0.3
+                            }
+
+                        ]
+
+                    },
+
+                    options: {
+
+                        responsive: true,
+
+                        maintainAspectRatio: false,
+
+                        plugins: {
+
+                            legend: {
+                                display: true
+                            }
+
+                        },
+
+                        scales: {
+
+                            y: {
+                                beginAtZero: false
+                            }
+
+                        }
+
+                    }
+
+                });
+
+        }
+
+    </script>
+
+</body>
+
+</html>
